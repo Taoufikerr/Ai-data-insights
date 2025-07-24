@@ -14,6 +14,8 @@ uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
+    df = df.dropna()  # Drop rows with any missing values
+    st.info(f"Rows with missing values have been removed. Remaining rows: {len(df)}")
     st.subheader("Dataset Preview")
     st.dataframe(df.head())
 
