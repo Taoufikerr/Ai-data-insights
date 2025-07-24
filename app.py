@@ -25,7 +25,7 @@ if uploaded_file is not None:
     st.dataframe(df)
 
     st.subheader("Summary Statistics")
-    st.text(df.describe(include='all').to_string())
+    st.dataframe(df.describe(include='all').transpose())
 
     target_column = st.selectbox("Select the target column (what you want to predict)", df.columns)
 
