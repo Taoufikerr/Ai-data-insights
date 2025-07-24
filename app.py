@@ -59,45 +59,43 @@ if uploaded_file:
             st.pyplot(fig)
 
             st.subheader("AI Summary (FLAN-T5)")
-           try:
-    # Prepare a cleaner, readable version of the summary
-    summary_data = df.describe().T  # Transpose for easy access
-    main_cols = summary_data.index[:3]  # Limit to first 3 numerical columns
+    try:
+        # Prepare a cleaner, readable version of the summary
+        summary_data = df.describe().T
+        main_cols = summary_data.index[:3]
 
-    formatted_lines = []
-    for col in main_cols:
-        stats = summary_data.loc[col]
-        formatted_lines.append(
-            f"{col} — Mean: {round(stats['mean'], 2)}, Min: {round(stats['min'], 2)}, Max: {round(stats['max'], 2)}"
+        formatted_lines = []
+        for col in main_cols:
+            stats = summary_data.loc[col]
+            formatted_lines.append(
+                f"{col} — Mean: {round(stats['mean'], 2)}, Min: {round(stats['min'], 2)}, Max: {round(stats['max'], 2)}"
+            )
+
+        clean_description = "\\n".join(formatted_lines)
+
+        # Compose prompt
+        prompt = (
+            f"The dataset contains {df.shape[0]} rows and {df.shape[1]} columns. "
+            f"Here are selected statistics:\n{clean_description}\n"
+            f"The model performance score is {round(score, 3)}. "
+            f"Generate a concise, professional summary."
         )
 
-    clean_description = "\\n".join(formatted_lines)
+        token_length = len(prompt.split())
+        if token_length < 400:
+            model_name = "google/flan-t5-small"
+        elif token_length < 800:
+            model_name = "google/flan-t5-base"
+        else:
+            model_name = "google/flan-t5-large"
 
-    # Compose prompt
-    prompt = (
-        f"The dataset contains {df.shape[0]} rows and {df.shape[1]} columns. "
-        f"Here are selected statistics:\n{clean_description}\n"
-        f"The model performance score is {round(score, 3)}. "
-        f"Generate a concise, professional summary."
-    )
+        summarizer = pipeline("summarization", model=model_name, tokenizer=model_name)
+        prompt = prompt[:1500]
+        summary = summarizer(prompt, max_length=120, min_length=50, do_sample=False)[0]['summary_text']
 
-    # Token-based model selection
-    token_length = len(prompt.split())
-    if token_length < 400:
-        model_name = "google/flan-t5-small"
-    elif token_length < 800:
-        model_name = "google/flan-t5-base"
-    else:
-        model_name = "google/flan-t5-large"
+        st.subheader("AI Summary (FLAN-T5)")
+        st.text_area("Summary", value=summary, height=160)
 
-    # Generate summary
-    summarizer = pipeline("summarization", model=model_name, tokenizer=model_name)
-    prompt = prompt[:1500]
-    summary = summarizer(prompt, max_length=120, min_length=50, do_sample=False)[0]['summary_text']
-
-    st.subheader("AI Summary (FLAN-T5)")
-    st.text_area("Summary", value=summary, height=160)
-
-except Exception as e:
-    st.warning("Could not generate AI summary. Please ensure GPU or internet is available.")
-    st.text(str(e))
+    except Exception as e:
+        st.warning("Could not generate AI summary. Please ensure GPU or internet is available.")
+        st.text(str(e))
