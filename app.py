@@ -59,25 +59,45 @@ if uploaded_file:
             st.pyplot(fig)
 
             st.subheader("AI Summary (FLAN-T5)")
-            try:
-                data_description = df.describe().to_string()
-                prompt = f"Summarize the following dataset statistics and model performance:\n{data_description}\nScore: {score}"
-                token_length = len(prompt.split())
+           try:
+    # Prepare a cleaner, readable version of the summary
+    summary_data = df.describe().T  # Transpose for easy access
+    main_cols = summary_data.index[:3]  # Limit to first 3 numerical columns
 
-                if token_length < 400:
-                    model_name = "google/flan-t5-small"
-                elif token_length < 800:
-                    model_name = "google/flan-t5-base"
-                else:
-                    model_name = "google/flan-t5-large"
+    formatted_lines = []
+    for col in main_cols:
+        stats = summary_data.loc[col]
+        formatted_lines.append(
+            f"{col} — Mean: {round(stats['mean'], 2)}, Min: {round(stats['min'], 2)}, Max: {round(stats['max'], 2)}"
+        )
 
-                summarizer = pipeline("summarization", model=model_name, tokenizer=model_name)
-                prompt = prompt[:1500]
-                summary = summarizer(prompt, max_length=100, min_length=30, do_sample=False)[0]['summary_text']
+    clean_description = "\\n".join(formatted_lines)
 
-                st.text_area("Summary", value=summary, height=150)
-            except Exception as e:
-                st.warning("Could not generate AI summary. Please ensure GPU or internet is available.")
-                st.text(str(e))
-        else:
-            st.warning("No numeric features to train on after encoding.")
+    # Compose prompt
+    prompt = (
+        f"The dataset contains {df.shape[0]} rows and {df.shape[1]} columns. "
+        f"Here are selected statistics:\n{clean_description}\n"
+        f"The model performance score is {round(score, 3)}. "
+        f"Generate a concise, professional summary."
+    )
+
+    # Token-based model selection
+    token_length = len(prompt.split())
+    if token_length < 400:
+        model_name = "google/flan-t5-small"
+    elif token_length < 800:
+        model_name = "google/flan-t5-base"
+    else:
+        model_name = "google/flan-t5-large"
+
+    # Generate summary
+    summarizer = pipeline("summarization", model=model_name, tokenizer=model_name)
+    prompt = prompt[:1500]
+    summary = summarizer(prompt, max_length=120, min_length=50, do_sample=False)[0]['summary_text']
+
+    st.subheader("AI Summary (FLAN-T5)")
+    st.text_area("Summary", value=summary, height=160)
+
+except Exception as e:
+    st.warning("Could not generate AI summary. Please ensure GPU or internet is available.")
+    st.text(str(e))
