@@ -6,9 +6,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.svm import SVR
-from xgboost import XGBRegressor
 from sklearn.metrics import r2_score
 import base64
+import importlib
+
+# Try to import XGBoost if available
+xgb_available = importlib.util.find_spec("xgboost") is not None
+if xgb_available:
+    from xgboost import XGBRegressor
 
 st.set_page_config(page_title="AI Salary Predictor", layout="wide")
 
@@ -30,7 +35,6 @@ if mode == "Dark":
 st.title("💼 AI Salary Predictor")
 st.markdown("Upload a dataset, choose filters, train a model, and predict salary.")
 
-# Upload data
 uploaded_file = st.file_uploader("Upload CSV", type="csv")
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
@@ -39,18 +43,16 @@ if uploaded_file:
 
     # Sidebar Filters
     st.sidebar.subheader("🔍 Filter Data")
-    filters = {}
     for col in df.select_dtypes(include='object').columns:
         options = df[col].unique().tolist()
         selection = st.sidebar.multiselect(f"Filter by {col}", options, default=options)
-        filters[col] = selection
         df = df[df[col].isin(selection)]
 
-    # Summary Statistics
+    # Summary
     st.subheader("📈 Summary Statistics")
     st.dataframe(df.describe())
 
-    # Visualizations
+    # Visualization
     st.subheader("📊 Data Visualizations")
     numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
     for col in numeric_cols:
@@ -59,12 +61,10 @@ if uploaded_file:
         ax.set_title(f"Distribution of {col}")
         st.pyplot(fig)
 
-    # Select Target and Features
     st.subheader("🎯 Define Target and Features")
     target = st.selectbox("Select Target Column", numeric_cols)
     features = st.multiselect("Select Feature Columns", df.columns.drop(target), default=list(df.columns.drop(target)))
 
-    # Encode and prepare data
     X = df[features].copy()
     y = df[target]
 
@@ -72,17 +72,19 @@ if uploaded_file:
         le = LabelEncoder()
         X[col] = le.fit_transform(X[col])
 
-    # Train/Test Split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Model Selection
     st.subheader("🤖 Model Selection")
-    model_choice = st.radio("Choose Model", ["Random Forest", "SVM", "XGBoost"])
+    available_models = ["Random Forest", "SVM"]
+    if xgb_available:
+        available_models.append("XGBoost")
+
+    model_choice = st.radio("Choose Model", available_models)
     if model_choice == "Random Forest":
         model = RandomForestRegressor()
     elif model_choice == "SVM":
         model = SVR()
-    elif model_choice == "XGBoost":
+    elif model_choice == "XGBoost" and xgb_available:
         model = XGBRegressor(verbosity=0)
 
     if st.button("🚀 Train Model"):
@@ -91,10 +93,17 @@ if uploaded_file:
         score = r2_score(y_test, predictions)
         st.success(f"Model trained. R² Score: {score:.4f}")
 
-        # Export
         df_preds = X_test.copy()
         df_preds['Actual'] = y_test.values
         df_preds['Predicted'] = predictions
+
+        # AI Summary (Simple Stats Summary)
+        st.subheader("🧠 AI Summary")
+        try:
+            summary = f"Target Mean: {y.mean():.2f}, Std: {y.std():.2f}, Min: {y.min()}, Max: {y.max()}. R² Score: {score:.4f}"
+            st.info(summary)
+        except:
+            st.warning("Summary not available.")
 
         csv = df_preds.to_csv(index=False).encode()
         b64 = base64.b64encode(csv).decode()
