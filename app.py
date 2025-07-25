@@ -22,18 +22,32 @@ mode = st.sidebar.radio("Select Theme", ("Light", "Dark"))
 if mode == "Dark":
     st.markdown("""
         <style>
-            body {
-                background-color: #0e1117;
-                color: #fafafa;
+            html, body, [class*="css"]  {
+                background-color: #0e1117 !important;
+                color: #fafafa !important;
             }
-            .stSelectbox, .stSlider, .stButton, .stFileUploader {
-                background-color: #1e222a;
+            .stSelectbox > div > div {
+                background-color: #1e222a !important;
+                color: #fafafa !important;
+            }
+            .stTextInput > div > div > input {
+                background-color: #1e222a !important;
+                color: #fafafa !important;
+            }
+            .stButton > button {
+                background-color: #1e222a !important;
+                color: #fafafa !important;
+            }
+            .stDataFrame, .stMarkdown, .stTable {
+                background-color: #1e222a !important;
+                color: #fafafa !important;
+            }
+            .css-1d391kg {
+                background-color: #1e222a !important;
+                color: #fafafa !important;
             }
         </style>
     """, unsafe_allow_html=True)
-
-st.title("💼 AI Salary Predictor")
-st.markdown("Upload a dataset, choose filters, train a model, and predict salary.")
 
 uploaded_file = st.file_uploader("Upload CSV", type="csv")
 if uploaded_file:
