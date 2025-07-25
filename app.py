@@ -4,125 +4,102 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay, mean_squared_error, r2_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from xgboost import XGBRegressor
+from sklearn.metrics import r2_score
+import base64
 
-# Optional Hugging Face summarization
-try:
-    from transformers import pipeline
-except ImportError:
-    pipeline = None
+st.set_page_config(page_title="AI Salary Predictor", layout="wide")
 
-st.set_page_config(page_title="AI Data Insights", layout="wide")
-st.title("📊 AI Data Insights App")
+# Sidebar: Theme toggle
+mode = st.sidebar.radio("Select Theme", ("Light", "Dark"))
+if mode == "Dark":
+    st.markdown("""
+        <style>
+            body {
+                background-color: #0e1117;
+                color: #fafafa;
+            }
+            .stSelectbox, .stSlider, .stButton, .stFileUploader {
+                background-color: #1e222a;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("Upload your CSV dataset", type=["csv"])
+st.title("💼 AI Salary Predictor")
+st.markdown("Upload a dataset, choose filters, train a model, and predict salary.")
 
-if uploaded_file is not None:
+# Upload data
+uploaded_file = st.file_uploader("Upload CSV", type="csv")
+if uploaded_file:
     df = pd.read_csv(uploaded_file)
+    st.subheader("📊 Dataset Preview")
+    st.dataframe(df.head())
 
-    tabs = st.tabs(["🔍 Preview", "📈 Analysis", "📊 Model", "🧠 AI Summary"])
+    # Sidebar Filters
+    st.sidebar.subheader("🔍 Filter Data")
+    filters = {}
+    for col in df.select_dtypes(include='object').columns:
+        options = df[col].unique().tolist()
+        selection = st.sidebar.multiselect(f"Filter by {col}", options, default=options)
+        filters[col] = selection
+        df = df[df[col].isin(selection)]
 
-    with tabs[0]:
-        st.subheader("Dataset Overview")
-        st.dataframe(df, use_container_width=True)
-        st.markdown(f"**Rows:** {df.shape[0]} &nbsp;&nbsp; **Columns:** {df.shape[1]}")
+    # Summary Statistics
+    st.subheader("📈 Summary Statistics")
+    st.dataframe(df.describe())
 
-    with tabs[1]:
-        st.subheader("Descriptive Statistics")
-        st.dataframe(df.describe(include='all').transpose(), use_container_width=True)
+    # Visualizations
+    st.subheader("📊 Data Visualizations")
+    numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+    for col in numeric_cols:
+        fig, ax = plt.subplots()
+        sns.histplot(df[col], kde=True, ax=ax)
+        ax.set_title(f"Distribution of {col}")
+        st.pyplot(fig)
 
-    with tabs[2]:
-        st.subheader("Model Training and Evaluation")
+    # Select Target and Features
+    st.subheader("🎯 Define Target and Features")
+    target = st.selectbox("Select Target Column", numeric_cols)
+    features = st.multiselect("Select Feature Columns", df.columns.drop(target), default=list(df.columns.drop(target)))
 
-        target_column = st.selectbox("Select the target column", df.columns)
+    # Encode and prepare data
+    X = df[features].copy()
+    y = df[target]
 
-        if target_column:
-            X = df.drop(columns=[target_column])
-            y = df[target_column]
+    for col in X.select_dtypes(include='object').columns:
+        le = LabelEncoder()
+        X[col] = le.fit_transform(X[col])
 
-            # Encode categorical features
-            X = pd.get_dummies(X)
+    # Train/Test Split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-            # Determine task type
-            is_classification = False
-            if y.dtype == 'object' or y.nunique() < 20:
-                is_classification = True
-                le = LabelEncoder()
-                y = le.fit_transform(y)
+    # Model Selection
+    st.subheader("🤖 Model Selection")
+    model_choice = st.radio("Choose Model", ["Random Forest", "SVM", "XGBoost"])
+    if model_choice == "Random Forest":
+        model = RandomForestRegressor()
+    elif model_choice == "SVM":
+        model = SVR()
+    elif model_choice == "XGBoost":
+        model = XGBRegressor(verbosity=0)
 
-            # Drop rows with nulls
-            X = X.dropna()
-            y = pd.Series(y).dropna()
+    if st.button("🚀 Train Model"):
+        model.fit(X_train, y_train)
+        predictions = model.predict(X_test)
+        score = r2_score(y_test, predictions)
+        st.success(f"Model trained. R² Score: {score:.4f}")
 
-            # Ensure alignment
-            X, y = X.loc[y.index], y.loc[X.index]
+        # Export
+        df_preds = X_test.copy()
+        df_preds['Actual'] = y_test.values
+        df_preds['Predicted'] = predictions
 
-            if X.empty or y.empty:
-                st.warning("Data is empty after cleaning. Please check your file.")
-            else:
-                # Split data
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        csv = df_preds.to_csv(index=False).encode()
+        b64 = base64.b64encode(csv).decode()
+        href = f'<a href="data:file/csv;base64,{b64}" download="predictions.csv">📥 Download Predictions as CSV</a>'
+        st.markdown(href, unsafe_allow_html=True)
 
-                # Train model
-                model = RandomForestClassifier() if is_classification else RandomForestRegressor()
-                model.fit(X_train, y_train)
-                y_pred = model.predict(X_test)
-
-                st.success("Model trained successfully.")
-
-                # Metrics
-                if is_classification:
-                    score = accuracy_score(y_test, y_pred)
-                    st.write(f"**Classification Accuracy:** {score:.2%}")
-                else:
-                    score = r2_score(y_test, y_pred)
-                    mse = mean_squared_error(y_test, y_pred)
-                    st.write(f"**R² Score:** {score:.4f}")
-                    st.write(f"**Mean Squared Error:** {mse:,.2f}")
-
-                # Visualization
-                st.subheader("Performance Visualization")
-                fig, ax = plt.subplots(figsize=(8, 5))
-
-                if is_classification:
-                    cm = confusion_matrix(y_test, y_pred)
-                    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-                    disp.plot(ax=ax)
-                    ax.set_title("Confusion Matrix")
-                else:
-                    sns.scatterplot(x=y_test, y=y_pred, ax=ax, alpha=0.7)
-                    sns.lineplot(x=y_test, y=y_test, color='red', ax=ax, linestyle='--')
-                    ax.set_xlabel("Actual")
-                    ax.set_ylabel("Predicted")
-                    ax.set_title("Actual vs Predicted")
-
-                st.pyplot(fig)
-
-    with tabs[3]:
-        st.subheader("AI-Generated Summary")
-
-        try:
-            if pipeline is None:
-                raise ImportError("Transformers not installed.")
-
-            data_description = df.describe().to_string()
-            prompt = f"Summarize the following dataset statistics and model performance:\n{data_description}\nScore: {score}"
-            token_length = len(prompt.split())
-
-            if token_length < 400:
-                model_name = "google/flan-t5-small"
-            elif token_length < 800:
-                model_name = "google/flan-t5-base"
-            else:
-                model_name = "google/flan-t5-large"
-
-            summarizer = pipeline("summarization", model=model_name, tokenizer=model_name)
-            prompt = prompt[:1500]
-            summary = summarizer(prompt, max_length=100, min_length=30, do_sample=False)[0]['summary_text']
-
-            st.text_area("AI Summary", value=summary, height=160)
-
-        except Exception as e:
-            st.warning("Could not generate summary. Ensure you have internet access and the required packages installed.")
-            st.text(str(e))
+        st.subheader("📄 Predictions Sample")
+        st.dataframe(df_preds.head())
